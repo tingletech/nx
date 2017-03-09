@@ -3,7 +3,8 @@
 var path = require('path');
 var _ = require('lodash');
 /* global -Promise */
-var Promise = require('bluebird');
+// var Promise = require('bluebird');
+var winston = require('winston');
 
 /**
  * upload files to the "Files" tab
@@ -49,9 +50,9 @@ var forceFileToDocument = function forceFileToDocument(client,
     .params({
       version: 'major'
     })
-    .execute(function(error, doc) {
-      if (error) { console.log(error); throw error; }
-      console.log(doc);
+    .execute()
+    .then(function(doc) {
+      winston.debug(doc);
       var uploader = client.operation('Blob.Attach')
         .params({
           document: doc,
@@ -59,16 +60,15 @@ var forceFileToDocument = function forceFileToDocument(client,
         })
         .uploader();
       uploader.uploadFile(file, options, function(fileIndex, fileObj, timeDiff) {
-        uploader.execute(function (error, data) {
-          if (error) {
+        uploader.execute.then(function (data) {
+            // `data` here is content of the file
+        })
+        .catch(function(error) {
             console.log('uploadError', error);
             throw error;
-          } else {
-            // `data` here is content of the file
-          }
         });
       });
-    });
+    }).catch(function(error) { console.log(error); throw error; });
 }
 
 /**
@@ -86,11 +86,7 @@ var fileToDirectory = function fileToDirectory(client, source, file, upload_fold
   var doc = uploader.uploadFile(file, options, function(fileIndex, fileObj, timeDiff) {
     uploader.execute({
       path: path.basename(source)
-    }, function (error, data) {
-      if (error) {
-        console.log('uploadError', error);
-        throw error;
-      } else {
+    }, function (data) {
         console.log('upload', data);
         var doc = client.document(data.entries[0]);
         doc.set({'file:filename': file.filename });
@@ -98,7 +94,9 @@ var fileToDirectory = function fileToDirectory(client, source, file, upload_fold
           if (error) { console.log(error); throw error; }
           console.log('updated file:filename');
         });
-      }
+    }).catch(function(error) {
+        console.log('uploadError', error);
+        throw error;
     });
   });
 };
@@ -133,17 +131,16 @@ var uploadFileToFolder = function uploadFileToFolder(client, args, source, file)
 
   // upload directory must exist
   var check_url = 'path' + args.upload_folder;
-  client.request(check_url).get(function(error, remote) {
-    if (error) { throw error; }
+  client.request(check_url).get().then(function(remote) {
 
     // upload directory must be Folderish
     if (remote.facets.indexOf('Folderish') >= 0){
 
       // does the file already exist on nuxeo?
       var check2_url = 'path' + args.upload_folder.replace(/\/$/, '') + '/' + file.filename;
-      client.request(check2_url).get(function(error, remote) {
+      client.request(check2_url).get().then().catch(function(error) {
         if (error) {
-          if (error.code === 'org.nuxeo.ecm.core.model.NoSuchDocumentException') {
+          if (error.response.status === 404) {
             // does not exist yet; upload away
             fileToDirectory(client, source, file, args.upload_folder);
           } else {
@@ -163,7 +160,7 @@ var uploadFileToFolder = function uploadFileToFolder(client, args, source, file)
     }
     // not Folderish
     else { throw new Error('destination ' + check_url + ' is not Folderish'); } 
-  });
+  }).catch(function(error) { throw error; });
 };
 
 
@@ -231,10 +228,11 @@ var createDocument = function createDocument(client, params, input){
     client.operation('Document.Create')
           .params(params)
           .input(input)
-          .execute(function(error, data, response) {
-            if (error) { reject(error); }
+          .execute()
+          .then(function(data, response) {
             resolve(data);
-          });
+          })
+          .catch(function(error) { reject(error); });
   });
 };
 
@@ -247,7 +245,7 @@ var formatDocumentEntityType = function formatDocumentEntityType(json) {
  * @param {Object} client - Nuxeo Client
  * @param {Object} args - parsed dict of command line arguments
  */
-var makeDocument = function makeDocument(client, pathin, type, force, parents){
+var makeDocument = function makeDocument(nuxeo, pathin, type, force, parents){
   // check if the document exists
   var check_url = 'path' + pathin;
   var input =  path.dirname(pathin);
@@ -259,20 +257,19 @@ var makeDocument = function makeDocument(client, pathin, type, force, parents){
     }
   };
 
-  var request = client.request(check_url);
-  Promise.promisifyAll(request);
+  var request = nuxeo.request(check_url);
 
-  return request.getAsync().then(function(remote) {
+  return request.get().then(function(remote) {
     // Folder is alread on the server
     if (force) {
-      return createDocument(client, params, input);
+      return createDocument(nuxeo, params, input);
     } else if (! parents){
       console.log(pathin + ' exists on nuxeo; use `-f` to force');
     }
   }).catch(function(error) {
-    if (error.code === 'org.nuxeo.ecm.core.model.NoSuchDocumentException') {
+    if (error.response.status === 404) {
       // does not exist yet; create it
-      return createDocument(client, params, input);
+      return createDocument(nuxeo, params, input);
     } else {
       console.log(error);
       throw error;
@@ -301,30 +298,44 @@ var makeParents = function makeParents(client, docpath, type, force){
  * @param {Object} client - Nuxeo Client
  * @param {Object} args - parsed dict of command line arguments
  */
-var lsPath = function lsPath(client, path){
+var lsPath = function lsPath(nuxeo, path){
   // check path specific path
   var check_url = 'path' + path;
-  client.request(check_url).get(function(error, remote) {
-    if (error) { console.log(error); throw error; }
-    formatDocumentEntityType(remote);
-  });
+  nuxeo.request(check_url)
+    .get()
+    .then(function(remote) {
+      formatDocumentEntityType(remote);
+    })
+    .catch(function(error){
+      console.log(error); throw error;
+    });
+
   // check the path for childern
   check_url = check_url.replace(/\/$/, '') + '/@children';
-  client.request(check_url).get(function(error, remote) {
-    if (error) { console.log(error); throw error; }
-    remote.entries.forEach(function(entry){
-      formatDocumentEntityType(entry);
+  nuxeo.request(check_url)
+    .get()
+    .then(function(remote) {
+      remote.entries.forEach(function(entry){
+        formatDocumentEntityType(entry);
+      });
+    })
+    .catch(function(error){
+      console.log(error); throw error;
     });
-  });
 };
 
-var nxql = function nxql(client, query){
-  client.request('query?query=' + encodeURIComponent(query))
-        .get(function(error, remote) {
-          if (error) { console.log(error); throw error; }
+var nxql = function nxql(nuxeo, query){
+  nuxeo.request()
+        .path('query')
+        .queryParams({'query': query})
+        .get()
+        .then(function(remote) {
           remote.entries.forEach(function(entry){
             formatDocumentEntityType(entry);
           });
+        })
+        .catch(function(error){
+          console.log(error); throw error;
         });
 };
 

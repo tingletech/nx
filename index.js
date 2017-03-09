@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 var fs = require('fs');
-var nuxeo = require('nuxeo');
+var Nuxeo = require('nuxeo');
 var path = require('path');
 var ini = require('ini');
 var osHomedir = require('os-homedir');
@@ -40,7 +40,7 @@ function main() {
     throw new Error('invalid auth specified in conf');
   }
   winston.debug(config_parsed);
-  var client = new nuxeo.Client(client_conf, args);
+  var client = new Nuxeo(client_conf, args);
 
   /** upfile - upload file to document or folder */
   if (args.subcommand_name === 'upfile') {
