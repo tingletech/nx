@@ -8,30 +8,25 @@ var winston = require('winston');
 
 /**
  * upload files to the "Files" tab
- * @param {Object} client - Nuxeo Client
+ * @param {Object} nuxeo - Nuxeo Client
  * @param {string} source - path to the local file
  * @param {Object} file - Node.js Stream
  * @param {string} destination - path on remote server
  */
-var filesToExtraFiles = function filesToExtraFiles(client, source, file, destination){
+var filesToExtraFiles = function filesToExtraFiles(nuxeo, source, file, destination){
   console.log(destination);
-  var uploader = client.operation('Blob.Attach')
-    .params({
-      document: destination,
-      save: true,
-      xpath: 'files:files'
+  nuxeo.batchUpload()
+    .upload(file)
+    .then(res => {
+      return nuxeo.operation('Blob.AttachOnDocument')
+        .param('document', destination)
+        .param('save', true)
+        .param('xpath', 'files:files')
+        .input(res.blob)
+        .execute({ schemas: 'files' });
     })
-    .uploader();
-  uploader.uploadFile(file, function(fileIndex, fileObj, timeDiff) {
-    uploader.execute(function (error, data) {
-      if (error) {
-        console.log('uploadError', error);
-        throw error;
-      } else {
-        // `data` here is content of the file 
-      }
-    });
-  });
+    .then(doc => { console.log(doc); })
+    .catch(error => { console.log(error); throw error; });
 };
 
 /**
@@ -40,84 +35,62 @@ var filesToExtraFiles = function filesToExtraFiles(client, source, file, destina
  * @param {Object} file - Node.js Stream
  * @param {Object} remote - Nuxeo Document
  */
-var forceFileToDocument = function forceFileToDocument(client,
+var forceFileToDocument = function forceFileToDocument(nuxeo,
                                                        file,
                                                        remote) {
-  var options = { 'name': file.path };
-  var checkin = client.operation('Document.CheckIn')
-    .context({ currentDocument: remote })
-    .input('doc:' + remote.path)
-    .params({
-      version: 'major'
-    })
+  // var options = { 'name': file.path };
+  var checkin = nuxeo.operation('Document.CheckIn')
+    .input(remote)
+    .params({ version: 'major' })
     .execute()
-    .then(function(doc) {
-      winston.debug(doc);
-      var uploader = client.operation('Blob.Attach')
-        .params({
-          document: doc,
-          save: true
+    .then(doc => {
+      nuxeo.batchUpload()
+        .upload(file)
+        .then(res => {
+            return nuxeo.operation('Blob.Attach')
+              .params({
+                document: doc,
+                save: true
+              })
+              .input(res.blob)
+              .execute({ schemas: 'file'})
+              .then(res => { console.log(res.statusText); } );
         })
-        .uploader();
-      uploader.uploadFile(file, options, function(fileIndex, fileObj, timeDiff) {
-        uploader.execute.then(function (data) {
-            // `data` here is content of the file
-        })
-        .catch(function(error) {
-            console.log('uploadError', error);
-            throw error;
-        });
-      });
+        .catch(error => {console.log(error); throw error; })
     }).catch(function(error) { console.log(error); throw error; });
 }
 
 /**
  * create a new document at a specific path
- * @param {Object} client - Nuxeo Client
+ * @param {Object} nuxeo - Nuxeo Client
  * @param {string} source - path to the local file
  * @param {Object} file - Node.js Stream
  * @param {string} upload_folder - path on remote server
  */
-var fileToDirectory = function fileToDirectory(client, source, file, upload_folder){
-  var uploader = client.operation('FileManager.Import')
-                       .context({ currentDocument: upload_folder })
-                       .uploader();
-  var options = { 'name': file.filename };
-  var doc = uploader.uploadFile(file, options, function(fileIndex, fileObj, timeDiff) {
-    uploader.execute({
-      path: path.basename(source)
-    }, function (data) {
-        console.log('upload', data);
-        var doc = client.document(data.entries[0]);
-        doc.set({'file:filename': file.filename });
-        doc.save(function(error, doc) {
-          if (error) { console.log(error); throw error; }
-          console.log('updated file:filename');
+var fileToDirectory = function fileToDirectory(nuxeo, source, file, upload_folder){
+  nuxeo.batchUpload()
+    .upload(file)
+    .then(function(res) {
+      console.log(res);
+      return nuxeo.operation('FileManager.Import')
+        .context({ currentDocument: upload_folder })
+        .input(res.blob)
+        .execute({
+          schemas: ['file'],
+          path: path.basename(source)
         });
-    }).catch(function(error) {
-        console.log('uploadError', error);
-        throw error;
-    });
-  });
+    })
+    .then(function(doc) {
+      console.log(doc.properties['file:content']);
+    })
+    .catch(function(error) {
+      console.log(error);
+      throw error;
+    })
 };
 
-var uploadExtraFiles = function uploadExtraFiles(client, args, source, file) {
-  var check_url = 'path' + args.destination_document;
-  client.schemas(['files']);
-  client.document(args.destination_document[0]).fetch(function(error, doc) {
-    if (error) { console.log(error); throw error; }
-    var updated = [];
-    doc.set({
-      'files:files': updated
-    });
-    doc.save(function(error, doc) {
-      if (error) { console.log(error); throw error; }
-      filesToExtraFiles(client, source, file, args.destination_document[0]);
-    });
-  });
-
-  client.request(check_url).get(function(error, remote) {
-  });
+var uploadExtraFiles = function uploadExtraFiles(nuxeo, args, source, file) {
+  filesToExtraFiles(nuxeo, source, file, args.destination_document[0]);
 };
 
 /**
@@ -137,30 +110,33 @@ var uploadFileToFolder = function uploadFileToFolder(client, args, source, file)
     if (remote.facets.indexOf('Folderish') >= 0){
 
       // does the file already exist on nuxeo?
-      var check2_url = 'path' + args.upload_folder.replace(/\/$/, '') + '/' + file.filename;
-      client.request(check2_url).get().then().catch(function(error) {
-        if (error) {
-          if (error.response.status === 404) {
-            // does not exist yet; upload away
-            fileToDirectory(client, source, file, args.upload_folder);
-          } else {
-            console.log(error);
-            throw error;
-          }
-        }
-        // file is on the server
-        else { 
+      var check2_url = 'path' + args.upload_folder.replace(/\/$/, '') + '/' + file.name;
+      client.request(check2_url)
+        .get()
+        .then(function(inner){
+          // file is on the server
           if (args.force) {
-            forceFileToDocument(client, file, remote);
+            return forceFileToDocument(client, file, inner);
           } else {
             console.log('file ' + check2_url  + ' exists on nuxeo; use `-f` to force');
           }
-        }
-      });
+        })
+        .catch(function(error) {
+          if (error.response.status === 404) {
+            // does not exist yet; upload away
+            return fileToDirectory(client, source, file, args.upload_folder);
+          }
+        });
     }
     // not Folderish
     else { throw new Error('destination ' + check_url + ' is not Folderish'); } 
-  }).catch(function(error) { throw error; });
+  }).catch(function(error) {
+    if (error.response.status === 404) {
+      console.log('`' + check_url + '` not found');
+    } else {
+      throw error;
+    }
+  });
 };
 
 

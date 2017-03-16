@@ -7,6 +7,22 @@ var ini = require('ini');
 var osHomedir = require('os-homedir');
 var winston = require('winston');
 var nx = require('./nx.js');
+var mime = require('mime');
+
+function filenameToNuxeoBlob(filename) {
+  var content = fs.createReadStream(filename);
+  var size = fs.statSync(filename)['size'];
+  var filename = path.basename(content.path);
+  var mimeType = mime.lookup(filename);   // <-- does not use file magic
+
+  return new Nuxeo.Blob({
+    name: filename,
+    content: content,
+    size: size,
+    mimeType: mimeType
+  });
+
+}
 
 /**
  * Main function called by command line
@@ -45,8 +61,7 @@ function main() {
   /** upfile - upload file to document or folder */
   if (args.subcommand_name === 'upfile') {
     var source = args.source_file[0];
-    var file = fs.createReadStream(source);
-    file.filename = path.basename(file.path);
+    var file = filenameToNuxeoBlob(source);
 
     // uploading to a folder
     if (args.upload_folder) {
@@ -61,7 +76,7 @@ function main() {
   /** extrafile **/
   else if (args.subcommand_name === 'extrafile') {
     var esource = args.source_file[0];
-    var efile = fs.createReadStream(esource);
+    var efile = filenameToNuxeoBlob(esource);
     nx.uploadExtraFiles(client, args, esource, efile);
   }
 
