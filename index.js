@@ -11,12 +11,12 @@ var mime = require('mime');
 
 function filenameToNuxeoBlob(filename) {
   var content = fs.createReadStream(filename);
-  var size = fs.statSync(filename)['size'];
-  var filename = path.basename(content.path);
+  var size = fs.statSync(filename).size;
+  var name = path.basename(content.path);
   var mimeType = mime.lookup(filename);   // <-- does not use file magic
 
   return new Nuxeo.Blob({
-    name: filename,
+    name: name,
     content: content,
     size: size,
     mimeType: mimeType

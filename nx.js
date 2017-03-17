@@ -2,9 +2,6 @@
 'use strict';
 var path = require('path');
 var _ = require('lodash');
-/* global -Promise */
-// var Promise = require('bluebird');
-var winston = require('winston');
 
 /**
  * upload files to the "Files" tab
@@ -39,7 +36,7 @@ var forceFileToDocument = function forceFileToDocument(nuxeo,
                                                        file,
                                                        remote) {
   // var options = { 'name': file.path };
-  var checkin = nuxeo.operation('Document.CheckIn')
+  nuxeo.operation('Document.CheckIn')
     .input(remote)
     .params({ version: 'major' })
     .execute()
@@ -56,9 +53,9 @@ var forceFileToDocument = function forceFileToDocument(nuxeo,
               .execute({ schemas: 'file'})
               .then(res => { console.log(res.statusText); } );
         })
-        .catch(error => {console.log(error); throw error; })
+        .catch(error => {console.log(error); throw error; });
     }).catch(function(error) { console.log(error); throw error; });
-}
+};
 
 /**
  * create a new document at a specific path
@@ -71,7 +68,6 @@ var fileToDirectory = function fileToDirectory(nuxeo, source, file, upload_folde
   nuxeo.batchUpload()
     .upload(file)
     .then(function(res) {
-      console.log(res);
       return nuxeo.operation('FileManager.Import')
         .context({ currentDocument: upload_folder })
         .input(res.blob)
@@ -86,7 +82,7 @@ var fileToDirectory = function fileToDirectory(nuxeo, source, file, upload_folde
     .catch(function(error) {
       console.log(error);
       throw error;
-    })
+    });
 };
 
 var uploadExtraFiles = function uploadExtraFiles(nuxeo, args, source, file) {
@@ -205,7 +201,7 @@ var createDocument = function createDocument(client, params, input){
           .params(params)
           .input(input)
           .execute()
-          .then(function(data, response) {
+          .then(function(data) {
             resolve(data);
           })
           .catch(function(error) { reject(error); });
@@ -235,7 +231,7 @@ var makeDocument = function makeDocument(nuxeo, pathin, type, force, parents){
 
   var request = nuxeo.request(check_url);
 
-  return request.get().then(function(remote) {
+  return request.get().then(function() {
     // Folder is alread on the server
     if (force) {
       return createDocument(nuxeo, params, input);
