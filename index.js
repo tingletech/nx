@@ -47,9 +47,11 @@ function main() {
       password: config_parsed.nuxeo_account.password,
     };
   } else if (auth_method === 'token') {
-    client_conf.auth = { method: 'token' };
+    client_conf.auth = {
+      method: 'token',
+      token: config_parsed.nuxeo_account['X-Authentication-Token'],
+    };
     client_conf.headers = {
-      'X-Authentication-Token': config_parsed.nuxeo_account['X-Authentication-Token'],
       timeout: 6995000
     };
   } else {
