@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 'use strict';
-var fs = require('fs');
-var Nuxeo = require('nuxeo');
-var path = require('path');
-var ini = require('ini');
-var osHomedir = require('os-homedir');
-var winston = require('winston');
-var nx = require('./nx.js');
-var mime = require('mime');
+const fs = require('fs');
+const Nuxeo = require('nuxeo');
+const path = require('path');
+const ini = require('ini');
+const osHomedir = require('os-homedir');
+const winston = require('winston');
+const nx = require('./nx.js');
+const mime = require('mime');
 
 function filenameToNuxeoBlob(filename) {
-  var content = fs.createReadStream(filename);
-  var size = fs.statSync(filename).size;
-  var name = path.basename(content.path);
-  var mimeType = mime.lookup(filename);   // <-- does not use file magic
+  const content = fs.createReadStream(filename);
+  const size = fs.statSync(filename).size;
+  const name = path.basename(content.path);
+  const mimeType = mime.lookup(filename);   // <-- does not use file magic
 
   return new Nuxeo.Blob({
     name: name,
@@ -29,16 +29,16 @@ function filenameToNuxeoBlob(filename) {
  */
 function main() {
   // parse subcommand and command line arguments
-  var args = require('./arguments.js').getArgs();
+  const args = require('./arguments.js').getArgs();
 
   // set up logging
   winston.level = args.loglevel ? args.loglevel.toLowerCase() : 'error';
 
   // set up nuxeo client (with nxrc file, if present)
-  var config_file = args.config || osHomedir() + '/.pynuxrc';
-  var config_parsed = ini.parse(fs.readFileSync(config_file, 'utf-8'));
-  var client_conf = config_parsed.rest_api;
-  var auth_method = config_parsed.nuxeo_account.method || 'basic';
+  const config_file = args.config || osHomedir() + '/.pynuxrc';
+  const config_parsed = ini.parse(fs.readFileSync(config_file, 'utf-8'));
+  const client_conf = config_parsed.rest_api;
+  const auth_method = config_parsed.nuxeo_account.method || 'basic';
   // support either auth method
   if (auth_method === 'basic') {
     client_conf.auth = {
@@ -58,12 +58,12 @@ function main() {
     throw new Error('invalid auth specified in conf');
   }
   winston.debug(config_parsed);
-  var client = new Nuxeo(client_conf, args);
+  const client = new Nuxeo(client_conf, args);
 
   /** upfile - upload file to document or folder */
   if (args.subcommand_name === 'upfile') {
-    var source = args.source_file[0];
-    var file = filenameToNuxeoBlob(source);
+    const source = args.source_file[0];
+    const file = filenameToNuxeoBlob(source);
 
     // uploading to a folder
     if (args.upload_folder) {
@@ -77,8 +77,8 @@ function main() {
 
   /** extrafile **/
   else if (args.subcommand_name === 'extrafile') {
-    var esource = args.source_file[0];
-    var efile = filenameToNuxeoBlob(esource);
+    const esource = args.source_file[0];
+    const efile = filenameToNuxeoBlob(esource);
     nx.uploadExtraFiles(client, args, esource, efile);
   }
 
@@ -100,7 +100,7 @@ function main() {
     nx.lsPath(client, args.path[0]);
   }
 
-  /** ls - list nuxeo path  */
+  /** q - nxql query  */
   else if (args.subcommand_name === 'q') {
     nx.nxql(client, args.query[0]);
   }

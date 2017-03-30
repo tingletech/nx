@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
-var path = require('path');
-var _ = require('lodash');
+const path = require('path');
+const bluebird = require('bluebird');
 
 /**
  * upload files to the "Files" tab
@@ -10,7 +10,7 @@ var _ = require('lodash');
  * @param {Object} file - Node.js Stream
  * @param {string} destination - path on remote server
  */
-var filesToExtraFiles = function filesToExtraFiles(nuxeo, source, file, destination){
+const filesToExtraFiles = function filesToExtraFiles(nuxeo, source, file, destination){
   console.log(destination);
   nuxeo.batchUpload()
     .upload(file)
@@ -32,10 +32,10 @@ var filesToExtraFiles = function filesToExtraFiles(nuxeo, source, file, destinat
  * @param {Object} file - Node.js Stream
  * @param {Object} remote - Nuxeo Document
  */
-var forceFileToDocument = function forceFileToDocument(nuxeo,
+const forceFileToDocument = function forceFileToDocument(nuxeo,
                                                        file,
                                                        remote) {
-  // var options = { 'name': file.path };
+  // const options = { 'name': file.path };
   nuxeo.operation('Document.CheckIn')
     .input(remote)
     .params({ version: 'major' })
@@ -64,7 +64,7 @@ var forceFileToDocument = function forceFileToDocument(nuxeo,
  * @param {Object} file - Node.js Stream
  * @param {string} upload_folder - path on remote server
  */
-var fileToDirectory = function fileToDirectory(nuxeo, source, file, upload_folder){
+const fileToDirectory = function fileToDirectory(nuxeo, source, file, upload_folder){
   nuxeo.batchUpload()
     .upload(file)
     .then(function(res) {
@@ -85,7 +85,7 @@ var fileToDirectory = function fileToDirectory(nuxeo, source, file, upload_folde
     });
 };
 
-var uploadExtraFiles = function uploadExtraFiles(nuxeo, args, source, file) {
+const uploadExtraFiles = function uploadExtraFiles(nuxeo, args, source, file) {
   filesToExtraFiles(nuxeo, source, file, args.destination_document[0]);
 };
 
@@ -96,17 +96,17 @@ var uploadExtraFiles = function uploadExtraFiles(nuxeo, args, source, file) {
  * @param {string} source - path to the local file
  * @param {Object} file - Node.js Stream
  */
-var uploadFileToFolder = function uploadFileToFolder(client, args, source, file){
+const uploadFileToFolder = function uploadFileToFolder(client, args, source, file){
 
   // upload directory must exist
-  var check_url = 'path' + args.upload_folder;
+  const check_url = 'path' + args.upload_folder;
   client.request(check_url).get().then(function(remote) {
 
     // upload directory must be Folderish
     if (remote.facets.indexOf('Folderish') >= 0){
 
       // does the file already exist on nuxeo?
-      var check2_url = 'path' + args.upload_folder.replace(/\/$/, '') + '/' + file.name;
+      const check2_url = 'path' + args.upload_folder.replace(/\/$/, '') + '/' + file.name;
       client.request(check2_url)
         .get()
         .then(function(inner){
@@ -143,14 +143,14 @@ var uploadFileToFolder = function uploadFileToFolder(client, args, source, file)
  * @param {string} source - path to the local file
  * @param {Object} file - Node.js stream
  */
-var uploadFileToFile = function uploadFileToFile(client, args, source, file){
+const uploadFileToFile = function uploadFileToFile(client, args, source, file){
 
-  var upload_folder = path.dirname(args.upload_document);
+  const upload_folder = path.dirname(args.upload_document);
   // change the file.filename to rename file on the move
   file.filename = path.basename(args.upload_document);
 
   // does the file already exist on nuxeo?
-  var check_url = 'path' + args.upload_document;
+  const check_url = 'path' + args.upload_document;
   client.request(check_url).get(function(error, remote) {
     if (error) {
       if (error.code === 'org.nuxeo.ecm.core.model.NoSuchDocumentException') {
@@ -176,11 +176,11 @@ var uploadFileToFile = function uploadFileToFile(client, args, source, file){
 /**
  * parse a path string into an array of parents
  */
-var parsePath = function parsePath(docpath){
+const parsePath = function parsePath(docpath){
   // clean up string and split into an array
   docpath = docpath.replace(/^\//,'').replace(/\/$/,'').split('/');
   // reduce the array into an array of parent paths
-  return _.reduce(docpath, function(result, n, z) {
+  return docpath.reduce(function(result, n, z) {
     // want to reduce to an array, it starts as a String
     if (result.constructor === String) {
       result = [ '/' + result ];
@@ -195,7 +195,7 @@ var parsePath = function parsePath(docpath){
  * @param {Object} client - Nuxeo Client
  * @param {Object} params - parameters to pass to {@code Document.Create}
  */
-var createDocument = function createDocument(client, params, input){
+const createDocument = function createDocument(client, params, input){
   return new Promise(function(resolve, reject){
     client.operation('Document.Create')
           .params(params)
@@ -208,7 +208,7 @@ var createDocument = function createDocument(client, params, input){
   });
 };
 
-var formatDocumentEntityType = function formatDocumentEntityType(json) {
+const formatDocumentEntityType = function formatDocumentEntityType(json) {
   console.log(json.uid + '\t' + json.type + '\t' + json.path );
 };
 
@@ -217,11 +217,11 @@ var formatDocumentEntityType = function formatDocumentEntityType(json) {
  * @param {Object} client - Nuxeo Client
  * @param {Object} args - parsed dict of command line arguments
  */
-var makeDocument = function makeDocument(nuxeo, pathin, type, force, parents){
+const makeDocument = function makeDocument(nuxeo, pathin, type, force, parents){
   // check if the document exists
-  var check_url = 'path' + pathin;
-  var input =  path.dirname(pathin);
-  var params = {
+  const check_url = 'path' + pathin;
+  const input =  path.dirname(pathin);
+  const params = {
     type: type,
     name: path.basename(pathin),
     properties: {
@@ -229,7 +229,7 @@ var makeDocument = function makeDocument(nuxeo, pathin, type, force, parents){
     }
   };
 
-  var request = nuxeo.request(check_url);
+  const request = nuxeo.request(check_url);
 
   return request.get().then(function() {
     // Folder is alread on the server
@@ -249,13 +249,12 @@ var makeDocument = function makeDocument(nuxeo, pathin, type, force, parents){
   });
 };
 
-
 /**
  * create parent directories
  */
-var makeParents = function makeParents(client, docpath, type, force){
+const makeParents = function makeParents(client, docpath, type, force){
   // https://github.com/petkaantonov/bluebird/issues/134
-  Promise.reduce(parsePath(docpath), function(memo, item) {
+  bluebird.reduce(parsePath(docpath), function(memo, item) {
     return makeDocument(client, item, type, force, true).then(function(res) {
       if (res) { console.log(res); }
     }).catch(function(error) {
@@ -270,9 +269,9 @@ var makeParents = function makeParents(client, docpath, type, force){
  * @param {Object} client - Nuxeo Client
  * @param {Object} args - parsed dict of command line arguments
  */
-var lsPath = function lsPath(nuxeo, path){
+const lsPath = function lsPath(nuxeo, path){
   // check path specific path
-  var check_url = 'path' + path;
+  const check_url = 'path' + path;
   nuxeo.request(check_url)
     .get()
     .then(function(remote) {
@@ -283,8 +282,8 @@ var lsPath = function lsPath(nuxeo, path){
     });
 
   // check the path for childern
-  check_url = check_url.replace(/\/$/, '') + '/@children';
-  nuxeo.request(check_url)
+  const url = check_url.replace(/\/$/, '') + '/@children';
+  nuxeo.request(url)
     .get()
     .then(function(remote) {
       remote.entries.forEach(function(entry){
@@ -296,7 +295,7 @@ var lsPath = function lsPath(nuxeo, path){
     });
 };
 
-var nxql = function nxql(nuxeo, query){
+const nxql = function nxql(nuxeo, query){
   nuxeo.request()
         .path('query')
         .queryParams({'query': query})
@@ -311,7 +310,7 @@ var nxql = function nxql(nuxeo, query){
         });
 };
 
-var mv_to_folder = function mv_to_folder(client, from, to){
+const mv_to_folder = function mv_to_folder(client, from, to){
   client.document(from)
     .fetch(function(error, doc) {
       if (error) { console.log(error); throw error; }
